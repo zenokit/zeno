@@ -82,3 +82,4 @@ export * from "./platform";
 export * from "./middleware";
 export * from "./monitor";
 export * from "./loadBalancer";
+import * from "./plugin";

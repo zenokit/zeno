@@ -2,12 +2,13 @@ import { getAdapter } from '@/adapters';
 import { defaultConfig, type ServerConfig } from "@/config/serverConfig";
 import { loadRoutes } from './router';
 import { watchRoutes, stopWatching } from './watcher';
+import { pluginManager } from './plugin';
 import type { Server } from 'http';
 import { primaryLog } from '@/utils/logs';
 import cluster from 'cluster';
+import { setupGracefulShutdown } from '@/utils/gracefulShutdown';
 
 let serverInstance: Server | null = null;
-let isShuttingDown = false;
 
 async function createServer(
   routesDir: string,
@@ -17,6 +18,10 @@ async function createServer(
   const verbose = config.isDev && cluster.isPrimary;
   
   try {
+    const extendedConfig = await pluginManager.extendConfig(config);
+    pluginManager.setConfig(extendedConfig);
+    
+    await pluginManager.runHook('onRoutesLoad', routesDir);
     await loadRoutes(routesDir);
     
     if (verbose) {
@@ -38,11 +43,15 @@ async function createServer(
     let server;
     switch (platform) {
       case 'node':
-        server = (handler as (config?: ServerConfig) => Server)(config);
-        serverInstance = server;
+        server = (handler as (config?: ServerConfig) => Server)(extendedConfig);
+        if (server && typeof server.on === 'function') {
+          serverInstance = server;
+        } else {
+          primaryLog("⚠️ Note: Server instance not available for graceful shutdown in this process");
+        }
         break;
       case 'bun':
-        server = (handler as (config?: ServerConfig) => void)(config);
+        server = (handler as (config?: ServerConfig) => void)(extendedConfig);
         break;
       case 'vercel':
       case 'netlify':
@@ -51,8 +60,24 @@ async function createServer(
       default:
         throw new Error(`Plateforme "${platform}" non supportée`);
     }
-
-    setupGracefulShutdown();
+    
+    if (serverInstance) {
+      pluginManager.setServer(serverInstance);
+      
+      await pluginManager.runHook('onServerInit', serverInstance, extendedConfig);
+      
+      setupGracefulShutdown(serverInstance, {
+        beforeShutdown: async () => {
+          await pluginManager.runHook('onServerShutdown', serverInstance!);
+        }
+      });
+      
+      setTimeout(async () => {
+        await pluginManager.runHook('onServerStart', serverInstance!, extendedConfig);
+      }, 100);
+    } else if (verbose) {
+      primaryLog("⚠️ No server instance available for graceful shutdown");
+    }
     
     return server;
   } catch (error) {
@@ -61,36 +86,6 @@ async function createServer(
     }
     throw error;
   }
-}
-
-function setupGracefulShutdown() {
-  if (!cluster.isPrimary) return;
-  
-  const shutdown = async (signal: string) => {
-    if (isShuttingDown) return;
-    isShuttingDown = true;
-    
-    primaryLog(`\nSignal ${signal} reçu, arrêt en cours...`);
-    
-    stopWatching();
-    
-    if (serverInstance && typeof serverInstance.close === 'function') {
-      await new Promise<void>((resolve) => {
-        serverInstance!.close(() => resolve());
-        
-        setTimeout(() => {
-          primaryLog('Fermeture forcée après délai');
-          resolve();
-        }, 3000);
-      });
-    }
-    
-    process.exit(0);
-  };
-  
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGHUP', () => shutdown('SIGHUP'));
 }
 
 export { createServer };

@@ -10,7 +10,17 @@ interface ShutdownOptions {
   onShutdown?: () => Promise<void> | void;
 }
 
-function setupGracefulShutdown(server: http.Server, options: ShutdownOptions = {}) {
+function setupGracefulShutdown(server: http.Server | null, options: ShutdownOptions = {}) {
+  if (!server) {
+    primaryLog('⚠️ Warning: No valid server provided to setupGracefulShutdown');
+    return { shutdown: (signal = 'MANUAL') => Promise.resolve() };
+  }
+
+  if (typeof server.on !== 'function') {
+    primaryLog('⚠️ Warning: Server provided to setupGracefulShutdown does not have .on method');
+    return { shutdown: (signal = 'MANUAL') => Promise.resolve() };
+  }
+
   const {
     timeout = 30000,
     signals = ['SIGTERM', 'SIGINT', 'SIGUSR2'],
@@ -21,7 +31,6 @@ function setupGracefulShutdown(server: http.Server, options: ShutdownOptions = {
   let isShuttingDown = false;
   const connections = new Set<net.Socket>();
 
-  // Track all connections
   server.on('connection', (connection: net.Socket) => {
     connections.add(connection);
     connection.on('close', () => {
@@ -29,7 +38,6 @@ function setupGracefulShutdown(server: http.Server, options: ShutdownOptions = {
     });
   });
 
-  // Function to perform the actual shutdown
   async function shutdown(signal: string) {
     if (isShuttingDown) return;
     isShuttingDown = true;
@@ -37,38 +45,30 @@ function setupGracefulShutdown(server: http.Server, options: ShutdownOptions = {
     primaryLog(`\n🛑 ${signal} received. Graceful shutdown initiated...`);
     
     try {
-      // Execute pre-shutdown tasks
       await beforeShutdown();
       
-      // Set a timeout to force shutdown if it takes too long
       const forceShutdownTimeout = setTimeout(() => {
         primaryLog('⚠️ Graceful shutdown timeout reached, forcing exit');
         process.exit(1);
       }, timeout);
       
-      // Close the server to stop accepting new connections
       await new Promise<void>((resolve) => {
-        server.close(() => resolve());
+        server!.close(() => resolve());
       });
       
       primaryLog('✅ Server closed, no longer accepting connections');
       
-      // Close existing connections
       if (connections.size > 0) {
         primaryLog(`Waiting for ${connections.size} active connections to finish...`);
         
-        // Set keep-alive to false to prevent new requests on existing connections
         for (const socket of connections) {
           socket.setKeepAlive(false);
           
-          // For HTTP/1.1 connections, we can use the destroy method after some time
-          // to give them a chance to finish their current request
           if (!socket.destroyed) {
             socket.end();
           }
         }
         
-        // Wait for all connections to close or force-close them after a timeout
         const connectionCloseTimeout = setTimeout(() => {
           if (connections.size > 0) {
             primaryLog(`Forcing close of ${connections.size} connections`);
@@ -78,7 +78,6 @@ function setupGracefulShutdown(server: http.Server, options: ShutdownOptions = {
           }
         }, timeout / 2);
         
-        // Clear timeout if all connections close naturally
         const checkInterval = setInterval(() => {
           if (connections.size === 0) {
             clearInterval(checkInterval);
@@ -88,15 +87,12 @@ function setupGracefulShutdown(server: http.Server, options: ShutdownOptions = {
         }, 1000);
       }
       
-      // Execute post-shutdown tasks
       await onShutdown();
       
-      // Clear the force shutdown timeout
       clearTimeout(forceShutdownTimeout);
       
       primaryLog('✅ Graceful shutdown completed');
       
-      // If we're a worker, exit the process
       if (cluster.isWorker) {
         process.exit(0);
       }
@@ -106,7 +102,6 @@ function setupGracefulShutdown(server: http.Server, options: ShutdownOptions = {
     }
   }
 
-  // Register signal handlers for graceful shutdown
   for (const signal of signals) {
     process.on(signal, () => {
       shutdown(signal).catch((error) => {
@@ -116,7 +111,6 @@ function setupGracefulShutdown(server: http.Server, options: ShutdownOptions = {
     });
   }
 
-  // Handle uncaught exceptions and unhandled rejections
   process.on('uncaughtException', (error) => {
     primaryLog('⚠️ Uncaught exception:', error);
     shutdown('uncaughtException').catch(() => process.exit(1));

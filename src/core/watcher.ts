@@ -1,6 +1,9 @@
+// Mise à jour de src/core/watcher.ts pour intégrer les plugins
+
 import { watch, type FSWatcher } from "fs";
 import debounce from "@/utils/debounce";
 import { loadRoutes, setVerboseLogging } from "./router";
+import { pluginManager } from "./plugin";
 import { existsSync } from "fs";
 import { primaryLog } from "@/utils/logs";
 
@@ -33,6 +36,8 @@ function watchRoutes(routesDir: string, verbose: boolean = false) {
       if (verbose) {
         primaryLog(`🔄 Change detected${filename ? ` in "${filename}"` : ""}, reloading...`);
       }
+      
+      await pluginManager.runHook('onRoutesReload', routesDir);
       
       await loadRoutes(routesDir);
       

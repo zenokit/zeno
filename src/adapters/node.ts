@@ -49,13 +49,11 @@ export const nodeAdapter: Adapter = {
       
       const defaultHeadersArr = defaultHeaders ? Object.entries(defaultHeaders) : [];
       
-      // Primary process for cluster management
       if (clusterConfig?.enabled && cluster.isPrimary) {
         const numWorkers = clusterConfig.workers || os.cpus().length;
         
         primaryLog(`🧵 Starting server with ${numWorkers} workers`);
         
-        // Force Round Robin scheduling when available
         if (cluster.schedulingPolicy !== undefined) {
           try {
             cluster.schedulingPolicy = cluster.SCHED_RR;
@@ -160,9 +158,7 @@ export const nodeAdapter: Adapter = {
               
               await route.handler(enhancedReq, enhancedRes);
               
-              if (!enhancedRes.headersSent) {
-                await runMiddlewares("afterRequest", enhancedReq, enhancedRes);
-              }
+              await runMiddlewares("afterRequest", enhancedReq, enhancedRes);
               
               requestTracker?.end(enhancedRes.statusCode || 200);
             } catch (error) {

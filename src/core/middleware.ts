@@ -5,6 +5,7 @@ import type {
   Request,
   Response,
 } from "@/types";
+import { pluginManager } from './plugin';
 import path from "path";
 import fs from "fs/promises";
 
@@ -23,7 +24,6 @@ const pathMiddlewares = new Map<string, {
   afterRequest: MiddlewareCallback[];
   onError: MiddlewareCallback[];
 }>();
-
 
 function addMiddleware(
   middlewareName: MiddlewareType,
@@ -47,6 +47,17 @@ async function runMiddlewares(
   res: Response,
   context?: any
 ): Promise<boolean> {
+  const pluginResult = await pluginManager.runMiddlewareHook(
+    middlewareName as 'beforeRequest' | 'afterRequest' | 'onError',
+    req,
+    res,
+    context
+  );
+  
+  if (pluginResult === false || res.headersSent) {
+    return false;
+  }
+  
   const hasGlobalMiddlewares = globalMiddlewares[middlewareName].length > 0;
   const hasPathMiddlewares = pathMiddlewares.size > 0;
   
@@ -57,7 +68,7 @@ async function runMiddlewares(
   for (const middleware of globalMiddlewares[middlewareName]) {
     try {
       const result = await middleware(req, res, context);
-      if (result === false) return false;
+      if (result === false || res.headersSent) return false;
     } catch (error) {
       if (middlewareName !== "onError") {
         try {
@@ -87,7 +98,7 @@ async function runMiddlewares(
       for (const middleware of middlewares[middlewareName]) {
         try {
           const result = await middleware(req, res, context);
-          if (result === false) return false;
+          if (result === false || res.headersSent) return false;
         } catch (error) {
           if (middlewareName !== "onError") {
             for (const errorHandler of middlewares.onError) {
