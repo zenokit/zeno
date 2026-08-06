@@ -215,7 +215,7 @@ describe('bunAdapter — middleware', () => {
     mockFindRoute.mockReturnValue(makeRoute(async () => { throw new Error('boom'); }));
     const res = await fetch(makeRequest('/'));
     expect(res.status).toBe(500);
-    expect(mockRunMiddlewares).toHaveBeenCalledWith('onError', expect.anything(), expect.anything(), { error: expect.objectContaining({ code: 500 }) });
+    expect(mockRunMiddlewares).toHaveBeenCalledWith('onError', expect.anything(), expect.anything(), { error: expect.objectContaining({ code: 500 }), phase: 'handler' });
   });
 
   it('does not send 500 fallback if onError already responded', async () => {

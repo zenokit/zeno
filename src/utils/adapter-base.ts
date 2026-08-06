@@ -387,7 +387,7 @@ export function parseQueryString(url: string): Record<string, string> {
 export async function handleAdapterError(req: Request, res: Response, error: unknown): Promise<void> {
   const httpError = isHttpError(error) ? error : normalizeError(error);
   if (httpError.log) console.error("[lacis] Error:", error);
-  if (hasMiddlewares()) await runMiddlewares("onError", req, res, { error: httpError });
+  if (hasMiddlewares()) await runMiddlewares("onError", req, res, { error: httpError, phase: "handler" });
   if (!res.headersSent) sendError(httpError, res);
 }
 

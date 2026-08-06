@@ -330,7 +330,7 @@ describe("netlifyAdapter handler", () => {
       "onError",
       expect.anything(),
       expect.anything(),
-      { error: expect.objectContaining({ code: 500 }) }
+      { error: expect.objectContaining({ code: 500 }), phase: 'handler' }
     );
   });
 });
