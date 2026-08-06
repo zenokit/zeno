@@ -34,6 +34,7 @@ export {
   HTTP_STATUS,
   createHttpError,
   isHttpError,
+  normalizeError,
   sendError,
   createBadRequestError,
   createUnauthorizedError,

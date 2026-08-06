@@ -135,6 +135,11 @@ describe('normalizeError', () => {
   it('handles undefined gracefully', () => {
     expect(normalizeError(undefined).code).toBe(500);
   });
+
+  it('is re-exported from the public package surface', async () => {
+    const publicApi = await import('@/index');
+    expect(typeof publicApi.normalizeError).toBe('function');
+  });
 });
 
 describe('isHttpError', () => {
