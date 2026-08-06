@@ -273,6 +273,25 @@ async function findTsFiles(dir: string): Promise<string[]> {
   return files
 }
 
+async function findFile(dir: string, name: string): Promise<string | null> {
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return null
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      const found = await findFile(full, name)
+      if (found) return found
+    } else if (entry.name === name) {
+      return full
+    }
+  }
+  return null
+}
+
 function spawnAsync(cmd: string, args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: 'inherit', cwd })
@@ -291,6 +310,7 @@ export async function build(routesDir: string, entry?: string): Promise<void> {
   const cwd = process.cwd()
   const platform = detectPlatform(cwd)
   const manifestPath = join(routesDir, '_manifest.ts')
+  let outDir = 'dist'
 
   await generateManifest(routesDir)
   await generateRouteTypes(routesDir)
@@ -329,7 +349,7 @@ export async function build(routesDir: string, entry?: string): Promise<void> {
           'TypeScript not found. Add it to your project: npm install --save-dev typescript'
         )
       }
-      const outDir = getTsConfigOutDir(cwd) ?? 'dist'
+      outDir = getTsConfigOutDir(cwd) ?? 'dist'
       await spawnAsync(tscBin, ['--outDir', outDir], cwd)
     }
   } finally {
@@ -337,5 +357,16 @@ export async function build(routesDir: string, entry?: string): Promise<void> {
     await unlink(manifestPath).catch(() => {})
   }
 
-  console.log('[lacis] Build complete → dist/')
+  // The serverless adapters import routes/_manifest.js from the compiled output.
+  // tsc obeys the project's tsconfig, so noEmit / a narrow `include` / an unexpected
+  // rootDir can silently produce nothing — fail loudly instead of a green build log.
+  const compiledManifest = await findFile(join(cwd, outDir), '_manifest.js')
+  if (!compiledManifest) {
+    throw new Error(
+      `Build produced no _manifest.js under "${outDir}/". The compiler ran but emitted nothing for the manifest — ` +
+        `check that your tsconfig does not set "noEmit": true and that "include" covers your routes directory.`
+    )
+  }
+
+  console.log(`[lacis] Build complete → ${outDir}/`)
 }
