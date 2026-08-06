@@ -231,18 +231,23 @@ export const nodeAdapter: Adapter = {
         const protocol = config.httpsOptions ? "https" : "http";
 
         server.listen(port, () => {
+          // Resolve the actual bound port — with `port: 0` the OS assigns a random one
+          const address =
+            typeof server.address === "function" ? server.address() : null;
+          const boundPort =
+            address && typeof address === "object" ? address.port : port;
           if (!clusterConfig?.enabled) {
             primaryLog(
-              `🚀 Server running at ${protocol}://localhost:${port}/` +
+              `🚀 Server running at ${protocol}://localhost:${boundPort}/` +
                 (isDev ? " (dev)" : ""),
             );
             if (isDev && performanceMonitor) {
               primaryLog(
-                `📊 Performance monitoring available at http://localhost:${port}/health`,
+                `📊 Performance monitoring available at http://localhost:${boundPort}/health`,
               );
             }
           } else if (isDev) {
-            primaryLog(`Worker ${process.pid} is listening on port ${port}`);
+            primaryLog(`Worker ${process.pid} is listening on port ${boundPort}`);
           }
         });
 
