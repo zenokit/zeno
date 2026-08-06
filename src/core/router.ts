@@ -241,10 +241,14 @@ class Router {
 
         for (const entry of entries) {
           if (entry.isDirectory()) {
+            // [...name] catch-all directories map to a wildcard segment ("*")
+            const wildcardMatch = entry.name.match(/^\[\.\.\.(\w+)\]$/);
             const paramMatch = entry.name.match(/^\[(\w+)(\??)]/);
-            const segmentName = paramMatch
-              ? `[${paramMatch[1]}${paramMatch[2]}]`
-              : entry.name;
+            const segmentName = wildcardMatch
+              ? "*"
+              : paramMatch
+                ? `[${paramMatch[1]}${paramMatch[2]}]`
+                : entry.name;
             await scanDir(path.join(dir, entry.name), [...currentPath, segmentName]);
           }
         }

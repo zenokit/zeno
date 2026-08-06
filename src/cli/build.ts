@@ -33,7 +33,10 @@ async function discoverRoutes(routesDir: string): Promise<DiscoveredRoute[]> {
       const importPath =
         './' + relative(routesDir, join(dir, indexFile.name)).replace(/\\/g, '/').replace(/\.ts$/, '.js')
       const routePath =
-        '/' + pathSegments.map((s) => s.replace(/^\[(\w+)\??\]$/, ':$1')).join('/')
+        '/' +
+        pathSegments
+          .map((s) => (/^\[\.\.\.\w+\]$/.test(s) ? '*' : s.replace(/^\[(\w+)\??\]$/, ':$1')))
+          .join('/')
       routes.push({ importPath, routePath: routePath === '//' ? '/' : routePath })
     }
 
@@ -144,8 +147,12 @@ function paramsTypeLiteral(segments: string[]): string {
     .map((s) => s.match(/^\[(\w+)(\?)?\]$/))
     .filter((m): m is RegExpMatchArray => m !== null)
     .map((m) => ({ name: m[1], optional: m[2] === '?' }))
-  if (params.length === 0) return 'Record<string, never>'
-  return '{ ' + params.map((p) => `${p.name}${p.optional ? '?' : ''}: string`).join('; ') + ' }'
+  // [...name] catch-all segments surface the remainder under the "*" key at runtime
+  const hasWildcard = segments.some((s) => /^\[\.\.\.\w+\]$/.test(s))
+  const entries = params.map((p) => `${p.name}${p.optional ? '?' : ''}: string`)
+  if (hasWildcard) entries.push(`"*": string`)
+  if (entries.length === 0) return 'Record<string, never>'
+  return '{ ' + entries.join('; ') + ' }'
 }
 
 function routeTypesContent(paramsLiteral: string): string {

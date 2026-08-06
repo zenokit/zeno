@@ -102,6 +102,18 @@ describe('generateManifest — route discovery', () => {
     expect(content).toContain("path: '/:id'");
   });
 
+  it('converts [...param] catch-all directory names to a * wildcard segment', async () => {
+    mockReaddir.mockImplementation((d: string) => {
+      if (d === ROUTES) return Promise.resolve([dir('files')]);
+      if (d.endsWith('/files')) return Promise.resolve([dir('[...path]')]);
+      if (d.endsWith('/[...path]')) return Promise.resolve([file('index.ts')]);
+      return Promise.resolve([]);
+    });
+    await generateManifest(ROUTES);
+    const content: string = mockWriteFile.mock.calls[0][1];
+    expect(content).toContain("path: '/files/*'");
+  });
+
   it('converts [param?] to :param (optional param syntax)', async () => {
     mockReaddir.mockImplementation((d: string) => {
       if (d === ROUTES) return Promise.resolve([dir('[slug?]')]);

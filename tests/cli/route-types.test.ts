@@ -66,4 +66,16 @@ describe('generateRouteTypes', () => {
     const content = writtenFor('routes/$types.d.ts');
     expect(content).toContain('export type RouteParams = Record<string, never>');
   });
+
+  it('types the catch-all remainder under "*" for a [...param] route', async () => {
+    mockReaddir.mockImplementation(async (d: string) => {
+      if (d === 'routes') return [dir('files')];
+      if (d === 'routes/files') return [dir('[...path]')];
+      if (d === 'routes/files/[...path]') return [file('index.ts')];
+      return [];
+    });
+    await generateRouteTypes('routes');
+    const content = writtenFor('routes/files/[...path]/$types.d.ts');
+    expect(content).toContain('export type RouteParams = { "*": string }');
+  });
 });
