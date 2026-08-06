@@ -3,7 +3,8 @@ import type { Request, Response } from "./http";
 import type { ServerlessRoute } from "./adapter";
 
 interface CorsConfig {
-  origin?: string | string[] | RegExp | ((origin: string) => boolean);
+  // "*" is the documented default; `string & {}` keeps other string literals inferable
+  origin?: "*" | (string & {}) | string[] | RegExp | ((origin: string) => boolean);
   methods?: string[];
   allowedHeaders?: string[];
   exposedHeaders?: string[];
